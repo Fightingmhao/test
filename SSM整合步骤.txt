@@ -1,0 +1,181 @@
+通过XML+注解的方式由spring来整合mybatis以及springMVC
+1、搭建环境
+	①、新建一个maven项目，选择webapp，引入相关架包
+	②、创建java程序目录和resources资源目录
+	③、在java目录下创建三层架构所需的各种包dao、domain、service、controller
+
+2、编写基本程序架构
+	①、在domain中创建javaBean：Account
+	②、在dao中创建持久层IAccountDao接口，并编写方法（查询所有，保存用户）
+	③、在service中创建业务层IAccountService接口，编写同样的方法
+	④、在service中新建包impl，编写AccountServiceImpl业务层实现类实现接口中的方法（方法中先简单输出语句）
+
+3、配置spring框架（使用其IOC注解方式将service层和dao层对象创建交给容器）主配置文件：applicationContext.xml
+	resources中各种配置文件
+	①、创建applicationContext.xml
+		1、添加约束，直接复制过来
+		2、spring开启注解扫描，要扫描的是service层和dao层的注解，controller层交给springMVC来管理
+			<context:component-scan base-package="com.mhao">
+		3、开启注解扫描后，就可以在AccountServiceImpl中使用注解@Service("accountService")来将service这个类交给IOC容器来管理
+
+	②、log4j.properties
+		打印日志的配置文件，直接copy来
+	③、
+
+	编写测试类来测试service层方法是否可以调用成功
+		@Test
+    		public void run1(){
+       			 //加载配置文件
+       			 ApplicationContext ac = new ClassPathXmlApplicationContext("classpath:applicationContext.xml");
+        			//获取对象
+       			 IAccountService as = (IAccountService) ac.getBean("accountService");
+        			//调用方法
+        			as.findAll();
+   		 }
+		
+4、配置springMVC框架	核心配置文件：springmvc.xml
+	①、在web.xml配置前端控制器和解决中文乱码
+		<!--  配置前端控制器-->：org.springframework.web.servlet.DispatcherServlet，里面会加载springmvc.xml配置文件
+		<!--  配置解决中文乱码-->:  org.springframework.web.filter.CharacterEncodingFilter
+ 	②、配置springmvc.xml文件	
+		1、<!--开启注解扫描，只扫描controller类-->
+    			<context:component-scan base-package="com.mhao">
+        				<context:include-filter type="annotation" expression="org.springframework.stereotype.Controller"/>
+    			</context:component-scan>
+    		2、<!--配置视图解析器：用来定位要跳转的页面-->
+			<bean id="internalResourceViewResolver" class="org.springframework.web.servlet.view.InternalResourceViewResolver">
+       				<property name="prefix" value="/WEB-INF/pages/"/>
+        				<property name="suffix" value=".jsp"/>
+    			</bean>
+    		3、<!--过滤静态资源-->
+			 <mvn:resources mapping="/css/**" location="/css/"/>
+   			 <mvn:resources mapping="/images/**" location="/images/"/>
+   			 <mvn:resources mapping="/js/**" location="/js/"/>
+    		4、<!--开启SpringMVC注解的支持-->
+    			<mvc:annotation-driven/>
+	③、编写controller类来测试controller层方法是否可以调用成功，调用成功则表示springMVC配置成功
+		index.jsp:	<a href="account/findAll">测试方法</a>
+		list.jsp:	<h3>查询到了所有用户信息</h3>
+		controller层方法：
+			@RequestMapping("/findAll")
+   			 public String findAll(){
+        				System.out.println("表现层：查询所有账户信息。。。");
+        				return "list";
+   			 }
+
+5、spring框架整合SpringMVC
+	整合过程及结果：通过ioc容器在controller创建service层对象，直接调用其中的方法，能成功调用即整合成功
+	问题：由于上面步骤3创建的spring的配置文件applicationContext.xml（用来将service和dao层的对象创建交给IOC容器）并没有被加载，即未生效，导致controller层没法直接注入创建service对象，
+                解决：在web.xml配置文件中添加配置Spring的监听器ContextLoaderListener，该对象的创建伴随着tomcat服务器的启动与关闭而创建与销毁
+	原理：要想完成加载，就可以考虑在启动tomcat服务器的时候，加载spring的配置文件applicationContext.xml
+		这里涉及到一个对象ServletContext域对象，该域对象伴随tomcat服务器启动与关闭而创建与销毁，而且只在服务器启动时创建一次
+		这就涉及到一类监听器ContextLoaderListener，它用来监听ServletContext域对象的创建与销毁，因此我们可以添加这个监听器用来加载spring的配置文件applicationContext.xml，加载后会创建WEB版本工厂，存储到ServletContext域对象中，然后从该对象中就能拿到想要的service和dao的对象
+	思路过程：tomcat启动——》ServletContext域对象被创建——》ContextLoaderListener监听器监听到了——》加载applicationContext.xml——》创建WEB版本工厂，存储到ServletContext域对象中——》从该对象中得到所需对象
+	
+	①、
+	<!--  配置Spring的监听器，默认只加载WEB-INF目录下的applicationContext.xml配置文件，而该配置文件在resources下
+      		解决方案：1、将该配置文件copy到WEB-INF下（不推荐，不便于配置文件的管理）
+               			 2、设置配置文件的路径			-->
+  	<listener>
+    		<listener-class>org.springframework.web.context.ContextLoaderListener</listener-class>
+ 	</listener>
+	<!--  设置配置文件的路径，这样就可以加载applicationContext.xml-->
+  	<context-param>
+    		<param-name>contextConfigLocation</param-name>
+    		<param-value>classpath:applicationContext.xml</param-value>
+  	</context-param>
+
+	②、依赖注入，调用方法即可
+		@Autowired
+    		private IAccountService accountService;
+	
+6、配置Mybatis框架		核心配置文件：SqlMapConfig.xml
+	①、编写核心配置文件SqlMapConfig.xml
+		1、<!--配置mysql环境-->
+		2、<!--引入映射配置文件-->---注解方式&Xml方式
+	②、在IAccountDao接口的方法上加注解
+	③、编写测试类测试mybatis框架是否配置好
+
+7、spring框架整合Mybatis
+	将Mybatis框架的配置文件SqlMapConfig.xml中东西转移到spring配置文件applicationContext.xml
+	<!--    1、配置连接池-->
+   		 <bean id="dataSource" class="com.mchange.v2.c3p0.ComboPooledDataSource">
+        			<property name="driverClass" value="com.mysql.jdbc.Driver"/>
+        			<property name="jdbcUrl" value="jdbc:mysql:///ssm"/>
+        			<property name="user" value="root"/>
+        			<property name="password" value="mh123"/>
+    		</bean>
+
+    	<!--    2、配置SqlSessionFactory工厂-->
+  	 <bean id="sqlSessionFactory" class="org.mybatis.spring.SqlSessionFactoryBean">
+       		<property name="dataSource" ref="dataSource"/>
+   	</bean>
+
+    	<!--    3、配置AccountDao所在的包-->
+    	<bean id="mapperScnner" class="org.mybatis.spring.mapper.MapperScannerConfigurer">
+        		<property name="basePackage" value="com.mhao.dao"/>
+    	</bean>
+	通过以上配置就可以依赖注入从容器中获取dao层对象了，此时Mybatis框架的核心配置文件：SqlMapConfig.xml就可以删了，无用了
+	
+	最后可以在spring配置文件applicationContext.xml中配置声明式事务管理
+	<!--   4、配置Spring框架声明式事务管理-->
+    		<!--    1、配置事务管理器-->
+    		<bean id="transactionManager" class="org.springframework.jdbc.datasource.DataSourceTransactionManager">
+        			<property name="dataSource" ref="dataSource"/>
+    		</bean>
+    		<!--    2、配置事务通知-->
+    		<tx:advice id="txAdvice" transaction-manager="transactionManager">
+        			<tx:attributes>
+           				<tx:method name="find*" read-only="true"/>
+            				<tx:method name="*" isolation="DEFAULT"/>
+        			</tx:attributes>
+    		</tx:advice>
+    		<!--    3、配置AOP增强，execution(* com.mhao.service.impl.*ServiceImpl.*(..))：对业务层接口所有方法，任一参数类型做增强-->
+    		<aop:config>
+        			<aop:advisor advice-ref="txAdvice" pointcut="execution(* com.mhao.service.impl.*ServiceImpl.*(..))"/>
+    		</aop:config>
+	
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
