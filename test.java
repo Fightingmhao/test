@@ -6,5 +6,7 @@ public class Account implements Serializable {
     private String name;
 
     private Double money;
+    
+    private Date birthday;
 
 }
